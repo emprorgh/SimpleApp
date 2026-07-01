@@ -1,0 +1,97 @@
+﻿@page "/contacts"
+@rendermode InteractiveServer
+
+<PageTitle>Contacts</PageTitle>
+
+<h1>Contact Management</h1>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Add New Contact</h5>
+        <EditForm Model="newContact" OnValidSubmit="HandleSubmit" FormName="AddContactForm">
+            <DataAnnotationsValidator />
+            <div class="mb-3">
+                <label for="firstName" class="form-label">First Name <span class="text-danger">*</span></label>
+                <InputText id="firstName" class="form-control" @bind-Value="newContact.FirstName" />
+                <ValidationMessage For="@(() => newContact.FirstName)" class="text-danger" />
+            </div>
+            <div class="mb-3">
+                <label for="lastName" class="form-label">Last Name <span class="text-danger">*</span></label>
+                <InputText id="lastName" class="form-control" @bind-Value="newContact.LastName" />
+                <ValidationMessage For="@(() => newContact.LastName)" class="text-danger" />
+            </div>
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <InputText id="email" type="email" class="form-control" @bind-Value="newContact.Email" />
+            </div>
+            <div class="mb-3">
+                <label for="phone" class="form-label">Phone Number</label>
+                <InputText id="phone" class="form-control" @bind-Value="newContact.Phone" />
+            </div>
+            <button type="submit" class="btn btn-primary">Submit</button>
+        </EditForm>
+    </div>
+</div>
+
+@if (contacts.Count > 0)
+{
+    <h5>Contact List</h5>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>First Name</th>
+                <th>Last Name</th>
+                <th>Email</th>
+                <th>Phone Number</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var contact in contacts)
+            {
+                <tr>
+                    <td>@contact.FirstName</td>
+                    <td>@contact.LastName</td>
+                    <td>@contact.Email</td>
+                    <td>@contact.Phone</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <p class="text-muted">No contacts yet. Fill the form above and click Submit to add one.</p>
+}
+
+@code {
+    private List<Contact> contacts = new();
+    private Contact newContact = new();
+
+    private void HandleSubmit()
+    {
+        if (newContact != null)
+        {
+            contacts.Add(new Contact
+            {
+                FirstName = newContact.FirstName,
+                LastName = newContact.LastName,
+                Email = newContact.Email,
+                Phone = newContact.Phone
+            });
+            newContact = new Contact();
+        }
+    }
+
+    private class Contact
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "First Name is required")]
+        public string? FirstName { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Last Name is required")]
+        public string? LastName { get; set; }
+
+        public string? Email { get; set; }
+
+        public string? Phone { get; set; }
+    }
+}
