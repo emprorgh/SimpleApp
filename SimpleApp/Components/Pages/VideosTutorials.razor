@@ -1,0 +1,230 @@
+﻿@page "/videos-tutorials"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@using System.Text.Json.Serialization
+
+<div class="row" id="video-grid">
+    @if (isLoading)
+    {
+        <div class="col-12 text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading videos...</span>
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="col-12">
+            <div class="alert alert-danger text-center p-4 shadow-sm" role="alert">
+                <i class="fa-solid fa-triangle-exclamation fa-2x mb-2"></i>
+                <h6 class="fw-bold">YouTube API Error</h6>
+                <p class="mb-2 small"><strong>Details:</strong> @errorMessage</p>
+                <hr>
+                <p class="mb-0 small text-muted">
+                    <strong>Check browser console (F12) for full error details.</strong><br>
+                    If this mentions key restrictions or HTTP referrer, update Website Restrictions in Google Cloud Console.
+                </p>
+            </div>
+        </div>
+    }
+    else if (videos == null || !videos.Any())
+    {
+        <div class="col-12">
+            <div class="bg-white p-5 text-center rounded shadow-sm">
+                <i class="fa-solid fa-video-slash fa-3x text-muted mb-3"></i>
+                <h5>No Public Videos Found</h5>
+                <p class="text-muted mb-0">Make sure your videos are set to <strong>Public</strong> (not Unlisted or Private) on YouTube.</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        @foreach (var video in videos)
+        {
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="card video-card shadow-sm border-0 overflow-hidden h-100">
+                    <a href="@video.VideoUrl" target="_blank" rel="noopener noreferrer" class="thumbnail-container d-block position-relative">
+                        <img src="@video.ThumbnailUrl" class="video-thumbnail w-100" alt="@video.Title">
+                        <div class="play-icon-overlay position-absolute top-50 start-50 translate-middle">
+                            <i class="fa-solid fa-circle-play text-danger fa-3x bg-white rounded-circle"></i>
+                        </div>
+                    </a>
+                    <div class="card-body bg-white d-flex flex-column justify-content-between p-3">
+                        <h6 class="card-title fw-bold text-dark video-title mb-3">
+                            <a href="@video.VideoUrl" target="_blank" rel="noopener noreferrer" class="text-dark text-decoration-none">
+                                @video.Title
+                            </a>
+                        </h6>
+                        <div class="d-flex justify-content-between align-items-center mt-auto pt-2 border-top">
+                            <span class="small text-muted">
+                                <i class="fa-regular fa-calendar-alt me-1"></i> @video.PublishDate.ToString("MMM d, yyyy")
+                            </span>
+                            <a href="@video.VideoUrl" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm px-3 rounded-pill fw-semibold">
+                                Watch <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size: 0.75rem;"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private const string YOUTUBE_API_KEY = "AIzaSyAxReW8_F2fHojLo8NG27H-NTtdkqDNV-E";
+    private const string CHANNEL_ID = "UCScQHcVgSVNAaUEMjCk3nXw";
+    private const int MAX_RESULTS = 12;
+
+    private List<VideoViewModel> videos = new();
+    private bool isLoading = true;
+    private string? errorMessage = null;
+
+    // Direct replacement for Angular's ngAfterViewInit
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Console.WriteLine("RegistrationComponent OnAfterRenderAsync - fetching YouTube videos");
+            await FetchYouTubeVideosAsync();
+        }
+    }
+
+    private async Task FetchYouTubeVideosAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            // Step 1: Get Uploads Playlist ID from Channel
+            string channelUrl = $"https://www.googleapis.com/youtube/v3/channels?key={YOUTUBE_API_KEY}&id={CHANNEL_ID}&part=contentDetails";
+            var channelResponse = await Http.GetFromJsonAsync<YouTubeChannelResponse>(channelUrl);
+
+            if (channelResponse?.Items == null || channelResponse.Items.Count == 0)
+            {
+                throw new Exception("Channel not found. Check Channel ID.");
+            }
+
+            string uploadsPlaylistId = channelResponse.Items[0].ContentDetails.RelatedPlaylists.Uploads;
+
+            // Step 2: Fetch videos from Uploads Playlist
+            string playlistUrl = $"https://www.googleapis.com/youtube/v3/playlistItems?key={YOUTUBE_API_KEY}&playlistId={uploadsPlaylistId}&part=snippet&maxResults={MAX_RESULTS}";
+            var playlistResponse = await Http.GetFromJsonAsync<YouTubePlaylistResponse>(playlistUrl);
+
+            if (playlistResponse?.Items != null)
+            {
+                videos = playlistResponse.Items.Select(item =>
+                {
+                    var snippet = item.Snippet;
+                    var thumbnail = snippet.Thumbnails?.High?.Url
+                                 ?? snippet.Thumbnails?.Medium?.Url
+                                 ?? snippet.Thumbnails?.Default?.Url
+                                 ?? string.Empty;
+
+                    return new VideoViewModel
+                    {
+                        Title = snippet.Title,
+                        VideoUrl = $"https://www.youtube.com/watch?v={snippet.ResourceId.VideoId}",
+                        ThumbnailUrl = thumbnail,
+                        PublishDate = snippet.PublishedAt
+                    };
+                }).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"YouTube API Error: {ex.Message}");
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged(); // Triggers UI re-render once data is loaded
+        }
+    }
+
+    // --- Data Transfer Objects (DTOs) for Deserialization ---
+
+    public class VideoViewModel
+    {
+        public string Title { get; set; } = string.Empty;
+        public string VideoUrl { get; set; } = string.Empty;
+        public string ThumbnailUrl { get; set; } = string.Empty;
+        public DateTime PublishDate { get; set; }
+    }
+
+    private class YouTubeChannelResponse
+    {
+        [JsonPropertyName("items")]
+        public List<ChannelItem>? Items { get; set; }
+    }
+
+    private class ChannelItem
+    {
+        [JsonPropertyName("contentDetails")]
+        public ContentDetails ContentDetails { get; set; } = new();
+    }
+
+    private class ContentDetails
+    {
+        [JsonPropertyName("relatedPlaylists")]
+        public RelatedPlaylists RelatedPlaylists { get; set; } = new();
+    }
+
+    private class RelatedPlaylists
+    {
+        [JsonPropertyName("uploads")]
+        public string Uploads { get; set; } = string.Empty;
+    }
+
+    private class YouTubePlaylistResponse
+    {
+        [JsonPropertyName("items")]
+        public List<PlaylistItem>? Items { get; set; }
+    }
+
+    private class PlaylistItem
+    {
+        [JsonPropertyName("snippet")]
+        public Snippet Snippet { get; set; } = new();
+    }
+
+    private class Snippet
+    {
+        [JsonPropertyName("title")]
+        public string Title { get; set; } = string.Empty;
+
+        [JsonPropertyName("publishedAt")]
+        public DateTime PublishedAt { get; set; }
+
+        [JsonPropertyName("resourceId")]
+        public ResourceId ResourceId { get; set; } = new();
+
+        [JsonPropertyName("thumbnails")]
+        public Thumbnails? Thumbnails { get; set; }
+    }
+
+    private class ResourceId
+    {
+        [JsonPropertyName("videoId")]
+        public string VideoId { get; set; } = string.Empty;
+    }
+
+    private class Thumbnails
+    {
+        [JsonPropertyName("high")]
+        public ThumbnailDetails? High { get; set; }
+
+        [JsonPropertyName("medium")]
+        public ThumbnailDetails? Medium { get; set; }
+
+        [JsonPropertyName("default")]
+        public ThumbnailDetails? Default { get; set; }
+    }
+
+    private class ThumbnailDetails
+    {
+        [JsonPropertyName("url")]
+        public string Url { get; set; } = string.Empty;
+    }
+}
